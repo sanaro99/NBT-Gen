@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "app/main.py", "use": "@vercel/python" },
+    { "src": "templates/**/*.html", "use": "@vercel/static" },
+    { "src": "static/**/*", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/static/(.*)", "dest": "static/$1" },
+    { "src": "/(.*)", "dest": "app/main.py" }
+  ],
+  "env": {
+    "GEMINI_API_KEY": "@gemini_api_key"
+  }
+}
