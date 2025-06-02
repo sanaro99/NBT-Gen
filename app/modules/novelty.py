@@ -1,95 +1,83 @@
-# backend/app/modules/novelty.py
-
-import torch
-import math
+import os
 import argparse
 import sys
-from transformers import DistilBertTokenizerFast, DistilBertForMaskedLM
+import requests
+import re
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
 
-# Use a distilled BERT model (~250 MB) suitable for Vercel.
-MODEL_NAME = "distilbert-base-uncased"
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+if not MISTRAL_API_KEY:
+    raise RuntimeError("Please set MISTRAL_API_KEY in your environment")
 
-# We will compute avg NLL (negative log‐likelihood per token). 
-# Typical “common” text avg NLL ≈ 2–3; very “surprising” text avg NLL > 6.
-# We map avg NLL in [2.0, 6.0] → novelty [0.0, 1.0].
-MIN_NLL = 2.0   # avg NLL ≤ 2.0 → novelty = 0.0 (common)
-MAX_NLL = 6.0   # avg NLL ≥ 6.0 → novelty = 1.0 (very novel)
+CHAT_URL = "https://api.mistral.ai/v1/chat/completions"
 
-# ─── LOAD MLM MODEL & TOKENIZER ─────────────────────────────────────────────────
+HEADERS = {
+    "Authorization": f"Bearer {MISTRAL_API_KEY}",
+    "Content-Type": "application/json",
+}
 
-print(f"[novelty.py] Loading MLM model '{MODEL_NAME}' (this may take a minute)…")
-tokenizer = DistilBertTokenizerFast.from_pretrained(MODEL_NAME)
-mlm_model = DistilBertForMaskedLM.from_pretrained(MODEL_NAME)
-mlm_model.eval()
-device = "cuda" if torch.cuda.is_available() else "cpu"
-mlm_model.to(device)
-if device == "cuda":
-    print("[novelty.py] Using GPU for inference")
+# Fallback novelty if anything goes wrong
+FALLBACK_NOVELTY = 0.5
 
+# ─── INTERNAL: CALL MISTRAL CHAT ─────────────────────────────────────────────────
 
-# ─── PSEUDO-LOSS (avg NLL) via MLM ────────────────────────────────────────────────
+def _call_mistral_chat(system_prompt: str, user_prompt: str, temperature: float = 0.0) -> str:
+    payload = {
+        "model": "mistral-small",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_prompt}
+        ],
+        "temperature": temperature
+    }
+    resp = requests.post(CHAT_URL, headers=HEADERS, json=payload, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    try:
+        return data["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError):
+        raise RuntimeError(f"Unexpected Mistral chat response: {data}")
 
-def compute_avg_nll(text: str) -> float:
-    """
-    Compute the average negative log‐likelihood (NLL) per token using DistilBERT.
-    We mask each token one at a time, let the model predict it, and accumulate
-    the negative log‐probability of the true token. Finally divide by number of tokens.
-    """
-    # Tokenize input
-    enc = tokenizer(text, return_tensors="pt")
-    input_ids = enc["input_ids"].to(device)         # shape (1, seq_len)
-    attention_mask = enc["attention_mask"].to(device)
-
-    seq_len = input_ids.size(1)
-    if seq_len == 0:
-        return float("inf")
-
-    total_nll = 0.0
-
-    # For each token position i, mask it and compute log‐probability of the true token
-    for i in range(seq_len):
-        masked_ids = input_ids.clone()
-        masked_ids[0, i] = tokenizer.mask_token_id
-
-        with torch.no_grad():
-            outputs = mlm_model(masked_ids, attention_mask=attention_mask)
-            logits = outputs.logits  # (1, seq_len, vocab_size)
-
-        true_id = input_ids[0, i].item()
-        token_logits = logits[0, i]
-        token_logprob = torch.log_softmax(token_logits, dim=0)[true_id].item()
-        total_nll += -token_logprob  # negative log‐likelihood
-
-    avg_nll = total_nll / seq_len
-    return float(avg_nll)
-
+# ─── NOVELTY SCORING via CHAT ────────────────────────────────────────────────────
 
 def score_novelty(text: str) -> float:
     """
-    Map average NLL to a 0–1 novelty score:
-      - avg NLL ≤ MIN_NLL → 0.0
-      - avg NLL ≥ MAX_NLL → 1.0
-      - otherwise linearly interpolate between MIN_NLL and MAX_NLL.
+    Ask Mistral Chat to rate how “novel” this paragraph is compared to usual encyclopedic text.
+    Returns a float in [0,1]. On failure, returns FALLBACK_NOVELTY.
     """
-    avg_nll = compute_avg_nll(text)
-    if avg_nll <= MIN_NLL:
-        return 0.0
-    if avg_nll >= MAX_NLL:
-        return 1.0
-    return float((avg_nll - MIN_NLL) / (MAX_NLL - MIN_NLL))
+    system_prompt = (
+        "You are a novelty assessor. "
+        "On a scale from 0 to 1, rate how unusual or groundbreaking this paragraph is "
+        "relative to standard encyclopedic/Wikipedia style. "
+        "0 means very common/predictable; 1 means extremely unexpected. "
+        "Reply with exactly one decimal number (e.g., 0.82) and nothing else."
+    )
+    user_prompt = f"\"\"\"\n{text}\n\"\"\""
+
+    try:
+        rating_str = _call_mistral_chat(system_prompt, user_prompt, temperature=0.0)
+        # extract numeric score from response
+        match = re.search(r"\d+(?:\.\d+)?", rating_str)
+        if match:
+            score = float(match.group())
+            print("Novelty score (0–1): ", score)
+            return max(0.0, min(1.0, score))
+        else:
+            raise ValueError(f"Could not parse novelty score from '{rating_str}'")
+    except Exception:
+        print("Failed to score novelty.")
+        return FALLBACK_NOVELTY
+    
 
 
-# ─── COMMAND-LINE INTERFACE ────────────────────────────────────────────────────
+# ─── COMMAND‐LINE INTERFACE ─────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Compute novelty via DistilBERT avg NLL (no external index)."
-    )
+    parser = argparse.ArgumentParser(description="Compute novelty via Mistral Chat API.")
     parser.add_argument(
         "--text", "-t", type=str, required=True,
-        help="Input string to score for novelty."
+        help="Input text to score for novelty."
     )
     args = parser.parse_args()
 
@@ -98,13 +86,9 @@ def main():
         print("Error: --text cannot be empty.", file=sys.stderr)
         sys.exit(1)
 
-    avg_nll = compute_avg_nll(txt)
-    novelty = score_novelty(txt)
-
+    score = score_novelty(txt)
     print(f"Input text:\n{txt}\n")
-    print(f"Avg NLL (per token): {avg_nll:.4f}")
-    print(f"Novelty score (0–1): {novelty:.4f}")
-
+    print(f"Novelty score (0–1): {score:.4f}")
 
 if __name__ == "__main__":
     main()

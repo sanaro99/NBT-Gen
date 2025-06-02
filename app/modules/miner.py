@@ -2,7 +2,7 @@ from google import genai
 from google.genai import types
 import os
 
-print("Gemini key in miner.py: ", os.getenv("GEMINI_API_KEY"))
+# print("Gemini key in miner.py: ", os.getenv("GEMINI_API_KEY"))
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 PROMPT_TEMPLATE = """
@@ -27,8 +27,8 @@ def mine_assumptions(topic: str):
         ),
     )
     text = response.text.strip()
-    print("Prompt in miner.py: ", prompt)
-    print("Response in miner.py: ", response.text.strip())
+    # print("Prompt in miner.py: ", prompt)
+    # print("Response in miner.py: ", response.text.strip())
     try:
         # expect JSON array or newline-separated
         if text.startswith('['):

@@ -27,6 +27,6 @@ def safe_rewrite(p: str):
         ),
     )
 
-    print("Prompt in safety.py: ", prompt)
-    print("Response in safety.py: ", response.text.strip())
+    # print("Prompt in safety.py: ", prompt)
+    # print("Response in safety.py: ", response.text.strip())
     return response.text.strip()
