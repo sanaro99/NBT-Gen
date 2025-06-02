@@ -1,15 +1,17 @@
 import os
 import re
 import requests
+import argparse
+import sys
+from dotenv import load_dotenv
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
 
-# Your Mistral API key (ensure it’s set in your environment)
+load_dotenv()
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 if not MISTRAL_API_KEY:
     raise RuntimeError("Please set MISTRAL_API_KEY in your environment")
 
-# Chat endpoint (per https://docs.mistral.ai/api/#tag/chat)
 CHAT_URL = "https://api.mistral.ai/v1/chat/completions"
 
 HEADERS = {
@@ -20,44 +22,38 @@ HEADERS = {
 # ─── INTERNAL: CALL MISTRAL CHAT ─────────────────────────────────────────────────
 
 def _call_mistral_chat(system_prompt: str, user_prompt: str, temperature: float = 0.0) -> str:
-    """
-    Send a single‐turn conversation to Mistral Chat. Returns the assistant's reply text.
-    """
     payload = {
         "model": "mistral-small",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt}
         ],
-        "temperature": temperature,
-        "max_new_tokens": 1  # we only expect a single‐token (decimal) reply
+        "temperature": temperature
     }
     resp = requests.post(CHAT_URL, headers=HEADERS, json=payload, timeout=30)
     resp.raise_for_status()
     data = resp.json()
-
-    # According to Mistral Chat spec, "choices"[0]["message"]["content"] contains the assistant reply
     try:
         return data["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError):
         raise RuntimeError(f"Unexpected Mistral chat response: {data}")
 
-# ─── PSEUDO‐PERPLEXITY → PLAUSIBILITY via CHAT ────────────────────────────────────
+# ─── PSEUDO‐PERPLEXITY → COHERENCE via CHAT ────────────────────────────────────
 
-def is_plausible(text: str) -> bool:
+def is_coherent(text: str) -> float:
     """
     Ask Mistral Chat to rate how coherent this paragraph is on a 0–1 scale.
-    If rating ≥ 0.5, we deem it plausible; otherwise, not.
+    Returns the coherence score in [0,1]; higher is more plausible.
     Quick regex filter first to avoid API calls on obviously invalid text.
     """
     # 1) Simple length/punctuation check
     words = re.findall(r"\w+", text)
     if len(words) < 10:
-        return False
+        return 0.0
     if not text.strip().endswith((".", "?", "!")):
-        return False
+        return 0.1
 
-    # 2) Chat‐based plausibility rating
+    # 2) Chat‐based coherence rating
     system_prompt = (
         "You are a text‐quality evaluator. "
         "Rate the following paragraph’s coherence and grammar on a scale from 0 to 1: "
@@ -68,8 +64,35 @@ def is_plausible(text: str) -> bool:
 
     try:
         rating_str = _call_mistral_chat(system_prompt, user_prompt, temperature=0.0)
-        score = float(rating_str)
-    except Exception:
-        return False
+        # extract numeric score from response
+        match = re.search(r"\d+(?:\.\d+)?", rating_str)
+        if match:
+            score = float(match.group())
+        else:
+            raise ValueError(f"Could not parse coherence score from '{rating_str}'")
+        print("Coherence score (0–1): ", score)
+        return score
+    except Exception as e:
+        print(f"[filter.py] Error calling Mistral API: {e}", file=sys.stderr)
+        return 0.0
 
-    return score >= 0.5
+# ─── COMMAND‐LINE INTERFACE ──────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(description="Test is_coherent(text) via Mistral API.")
+    parser.add_argument(
+        "--text", "-t", type=str, required=True,
+        help="The paragraph to test for coherence."
+    )
+    args = parser.parse_args()
+
+    txt = args.text.strip()
+    if not txt:
+        print("Error: --text cannot be empty.", file=sys.stderr)
+        sys.exit(1)
+
+    result = is_coherent(txt)
+    print(f"Coherence: {result}")
+
+if __name__ == "__main__":
+    main()

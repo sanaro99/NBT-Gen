@@ -28,7 +28,9 @@ def generate(request: Request, topic: str = Form(...), wildness: int = Form(50))
             "idea": data["idea"],
             "novelty": data["novelty"],
             "topic": topic,
-            "wildness": wildness
+            "wildness": wildness,
+            "coherence": data["coherence"],
+            "version": data["version"]
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

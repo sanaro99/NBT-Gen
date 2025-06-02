@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+WORKDIR /code
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt ./
@@ -9,13 +9,14 @@ COPY requirements.txt ./
 RUN --mount=type=cache,target=/root/.cache \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the app
-COPY . /app
+# Copy application code, static assets, and templates
+COPY app/ /code/app
+COPY static/ /code/static
+COPY templates/ /code/templates
 
 # Environment variables (adjust as needed)
 ENV PYTHONUNBUFFERED=1
 
+# Expose port and start server
 EXPOSE 8000
-
-# Run Uvicorn (assuming FastAPI)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

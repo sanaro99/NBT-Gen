@@ -76,7 +76,7 @@
       </div>
       <div class="row justify-content-center mx-1">
         <div class="nes-container with-title is-centered">
-          <p class="title">Never-Before-Thought Generator</p>
+          <p class="title">github: <a href="https://github.com/sanaro99/NBT-Gen" target="_blank">sanaro99/NBT-Gen</a></p>
           <form action="/generate" method="post" class="mb-4">
             <div class="nes-field mb-4 is-inline">
               <label for="topic">Topic</label>
@@ -95,8 +95,8 @@
         <div class="mt-4">
           <h5 class="card-title">💡 New thought</h5>
           <p class="card-text" style="white-space: pre-line;">{{ idea }}</p>
-          {# Novelty display temporarily disabled #}
-          {# <p class="text-muted">Novelty score: {{ '%.2f' | format(novelty) }}</p> #}
+          <p class="text-muted">Novelty score: {{ '%.2f' | format(novelty) }}</p>
+          <p class="text-muted">Coherence score: {{ '%.2f' | format(coherence) }}</p>
         </div>
         {% endif %}
       </div>

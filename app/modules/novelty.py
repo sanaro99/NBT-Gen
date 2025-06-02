@@ -3,9 +3,11 @@ import argparse
 import sys
 import requests
 import re
+from dotenv import load_dotenv
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
 
+load_dotenv()
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 if not MISTRAL_API_KEY:
     raise RuntimeError("Please set MISTRAL_API_KEY in your environment")
