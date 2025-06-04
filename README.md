@@ -1,7 +1,7 @@
 # Never-Before-Thought Generator (NBT-Gen)
 
 _A web application that outputs weird-yet-meaningful "never-before-thought" ideas._  
-Built with **FastAPI** backend, **Jinja2 Templates** (Bootstrap 5 & [NES.css](https://github.com/nostalgic-css/NES.css)) for UI, **Gemini** (1.5, 2.0, and 2.5 Flash Preview) for assumption mining, idea composition, and final polish, and **Mistral Chat** for coherence & novelty scoring.
+Built with **FastAPI** backend, **Jinja2 Templates** (Bootstrap 5 & [NES.css](https://github.com/nostalgic-css/NES.css)) for UI, **Gemini** (1.5, 2.0, and 2.5 Flash Preview) for assumption mining, idea composition, and final polish, and **Mistral-small** for coherence & novelty scoring.
 
 ---
 
@@ -102,6 +102,23 @@ NBT-Gen/
 * **Add local fallback** – Mistral/phi-2 for offline or quota-safe operation.
 
 ---
+## 7  Sample Outputs
+#### Sample output for topic: 'plate tectonics'
 
-## 7  License
+##### with wildness as 0
+![Plate tectonics with wildness 0](static/screenshots/nbt-plate-tectonics-0.png "Sample output for topic: 'plate tectonics' with wildness 0")
+
+##### with wildness as 100
+![Plate tectonics with wildness 100](static/screenshots/nbt-plate-tectonics-100.png "Sample output for topic: 'plate tectonics' with wildness 100")
+
+#### Sample output for topic: 'observable universe'
+![Output for topic: 'observable universe'](static/screenshots/nbt-1.png "Sample output for topic: 'observable universe'")
+
+#### Sample output for topic: 'jupiter is a gas giant'
+![Output for topic: 'jupiter is a gas giant'](static/screenshots/nbt-2.png "Sample output for topic: 'jupiter is a gas giant'")
+
+#### Sample output for topic: 'photosynthesis' on a small screen device
+![Output for topic: 'photosynthesis'](static/screenshots/nbt-3.png "Sample output for topic: 'photosynthesis'")
+
+## 8  License
 GNU v3 for source code. Gemini usage governed by Google AI Studio terms.
