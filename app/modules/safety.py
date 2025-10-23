@@ -19,7 +19,7 @@ Target 11th-grade reading level, Flesch 50–60.
 def safe_rewrite(p: str):
     prompt = SAFE_PROMPT_TEMPLATE.format(p=p)
     response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
+        model="models/gemini-2.0-flash-lite",
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,

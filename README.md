@@ -1,12 +1,12 @@
 # Never-Before-Thought Generator (NBT-Gen)
 
 _A web application that outputs weird-yet-meaningful "never-before-thought" ideas._  
-Built with **FastAPI** backend, **Jinja2 Templates** (Bootstrap 5 & [NES.css](https://github.com/nostalgic-css/NES.css)) for UI, **Gemini** (1.5, 2.0, and 2.5 Flash Preview) for assumption mining, idea composition, and final polish, and **Mistral-small** for coherence & novelty scoring.
+Built with **FastAPI** backend, **Jinja2 Templates** (Bootstrap 5 & [NES.css](https://github.com/nostalgic-css/NES.css)) for UI, **Gemini** (2.0 and 2.5 Flash) for assumption mining, idea composition, and final polish, and **Mistral-small** for coherence & novelty scoring.
 
 ---
 
 ## 1  Project Purpose
-To build an autonomous creativity pipeline that takes any **topic** (e.g. *“plate tectonics”*) and returns a short, speculative thought that is:
+To build an autonomous creativity pipeline that takes any **topic** (e.g. *"plate tectonics"*) and returns a short, speculative thought that is:
 * **Novel** – unlikely to exist in public discourse or AI training data.
 * **Coherent** – grammatically correct and internally logical.
 * **Surprising** – inverts or twists a core assumption of the topic.
@@ -18,7 +18,7 @@ To build an autonomous creativity pipeline that takes any **topic** (e.g. *“pl
 ┌────────────┐    ┌──────────────┐    ┌────────────────────┐    ┌───────────────┐
 │  FastAPI   │─>──│ Assumption   │─>──│   Divergent Idea   │─>──│   Coherence   │
 │  endpoint  │    │  Miner       │    │     Composer       │    │     Filter    │
-│  /generate │    │ (Gemini 1.5) │    │(Gemini 2.5, T(0-2))│    │(Mistral-small)│
+│  /generate │    │ (Gemini 2.0) │    │(Gemini 2.5, T(0-2))│    │(Mistral-small)│
 └────────────┘    └──────────────┘    └────────────────────┘    └───────────────┘
                                                                        │
                                                           ┌────────────┴──────────┐
@@ -28,16 +28,16 @@ To build an autonomous creativity pipeline that takes any **topic** (e.g. *“pl
                                                                        │
                                                           ┌────────────┴──────────┐
                                                           │ Safety & Final Polish │
-                                                          │     (Gemini 2.0)      │
+                                                          │  (Gemini 2.0 Flash)   │
                                                           └────────────┬──────────┘
                                                                        │
                                           Server-rendered Web UI via Jinja2 Templates
 ```
-1. **Assumption Miner** – Gemini 1.5 at `temperature≈0` generates canonical premises of the topic.  
-2. **Assumption Tweaker & Composer** – Gemini 2.5 Flash Preview at `temperature` set by the wildness slider flips one premise into a bold, coherent paragraph.  
+1. **Assumption Miner** – Gemini 2.0 Flash at `temperature≈0` generates canonical premises of the topic.  
+2. **Assumption Tweaker & Composer** – Gemini 2.5 Flash at `temperature` set by the wildness slider flips one premise into a bold, coherent paragraph.  
 3. **Coherence Filter** – Mistral-small rates coherence [0–1]; scores ≥0.3 pass.  
 4. **Novelty Scorer** – Mistral-small rates novelty [0–1], indicating unexpectedness.  
-5. **Safety & Final Polish** – Gemini 2.0 rewrites for clarity & compliance.  
+5. **Safety & Final Polish** – Gemini 2.0 Flash Lite rewrites for clarity & compliance.  
 6. **Frontend** – Server-rendered Jinja2 templates with Bootstrap 5, NES.css, dark/light toggle, and wildness slider.
 
 ---

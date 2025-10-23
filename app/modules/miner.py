@@ -19,7 +19,7 @@ Make the first four common textbook facts and the last two lesser-known.
 def mine_assumptions(topic: str):
     prompt = PROMPT_TEMPLATE.format(topic=topic)
     response = client.models.generate_content(
-        model="gemini-1.5-flash-latest",
+        model="models/gemini-2.0-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,

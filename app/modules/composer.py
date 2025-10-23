@@ -29,7 +29,7 @@ def compose_idea(topic: str, assumption: str, wildness: int = 50):
     temp = (clamped_wildness / 100) * 2.0
     prompt = PROMPT_TEMPLATE.format(topic=topic, assumption=assumption)
     response = client.models.generate_content(
-        model="gemini-2.5-flash-preview-05-20",
+        model="models/gemini-2.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
