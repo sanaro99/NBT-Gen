@@ -63,6 +63,43 @@
       .card {
         background-color: var(--bs-card-bg) !important;
       }
+      /* Dark mode fixes */
+      .dark-mode .nes-container {
+        background-color: #1F2937 !important;
+        color: #D1D5DB !important;
+      }
+      .dark-mode .nes-container.with-title > .title {
+        background-color: #1F2937 !important;
+        color: #F9FAFB !important;
+      }
+      .dark-mode a {
+        color: #60A5FA !important;
+      }
+      .dark-mode .text-muted {
+        color: #9CA3AF !important;
+      }
+      /* Loading animation */
+      @keyframes blink {
+        0%, 49% { opacity: 1; }
+        50%, 100% { opacity: 0; }
+      }
+      .loading-dots {
+        display: inline-block;
+        animation: blink 1s infinite;
+      }
+      .btn-loading {
+        position: relative;
+        pointer-events: none;
+      }
+      .status-message {
+        text-align: center;
+        margin-top: 1rem;
+        font-size: 0.9rem;
+        min-height: 1.5rem;
+      }
+      .dark-mode .status-message {
+        color: #9CA3AF;
+      }
     </style>
   </head>
   <body>
@@ -87,8 +124,14 @@
             <input type="range" name="wildness" id="wildness" class="form-range" min="0" max="100" value="{{ wildness or 50 }}">
           </div>
           <div class="mt-4 d-flex justify-content-center">
-            <button type="submit" class="nes-btn is-primary">Generate</button>
+            <button type="submit" class="nes-btn is-primary" id="generate-btn">
+              <span class="btn-text">Generate</span>
+              <span class="loading-text" style="display: none;">
+                Generating<span class="loading-dots">...</span>
+              </span>
+            </button>
           </div>
+          <div class="status-message" id="status-message"></div>
         </form>
         {% if idea %}
         <hr>
@@ -108,12 +151,66 @@
         const wildnessValue = document.getElementById('wildness-value');
         wildnessValue.textContent = wildnessInput.value;
         wildnessInput.addEventListener('input', () => wildnessValue.textContent = wildnessInput.value);
+        
         const form = document.querySelector('form');
-        const btn = form.querySelector('button[type="submit"]');
-        form.addEventListener('submit', () => {
+        const btn = document.getElementById('generate-btn');
+        const btnText = btn.querySelector('.btn-text');
+        const loadingText = btn.querySelector('.loading-text');
+        const statusMessage = document.getElementById('status-message');
+        
+        let isStreaming = false;
+        
+        form.addEventListener('submit', (e) => {
+          if (isStreaming) return;
+          
+          e.preventDefault();
+          isStreaming = true;
+          
+          const topic = document.getElementById('topic').value;
+          const wildness = document.getElementById('wildness').value;
+          
+          btn.classList.add('is-disabled', 'btn-loading');
           btn.setAttribute('disabled', 'disabled');
-          btn.classList.add('is-disabled');
+          btnText.style.display = 'none';
+          loadingText.style.display = 'inline';
+          statusMessage.textContent = 'Starting...';
+          
+          const eventSource = new EventSource(`/generate-stream?topic=${encodeURIComponent(topic)}&wildness=${wildness}`);
+          
+          eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'status') {
+              statusMessage.textContent = data.message;
+            } else if (data.type === 'result') {
+              eventSource.close();
+              statusMessage.textContent = 'Complete! Refreshing...';
+              // Submit form to get rendered result
+              setTimeout(() => {
+                isStreaming = false;
+                form.submit();
+              }, 500);
+            } else if (data.type === 'error') {
+              eventSource.close();
+              statusMessage.textContent = 'Error: ' + data.message;
+              btn.classList.remove('is-disabled', 'btn-loading');
+              btn.removeAttribute('disabled');
+              btnText.style.display = 'inline';
+              loadingText.style.display = 'none';
+              isStreaming = false;
+            }
+          };
+          
+          eventSource.onerror = () => {
+            eventSource.close();
+            statusMessage.textContent = 'Connection error. Submitting...';
+            setTimeout(() => {
+              isStreaming = false;
+              form.submit();
+            }, 1000);
+          };
         });
+        
         // Theme toggle setup
         const themeBtn = document.getElementById('theme-toggle');
         const rootEl = document.body;
