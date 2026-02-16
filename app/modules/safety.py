@@ -10,16 +10,26 @@ Paragraph:
 """
 
 SYSTEM_INSTRUCTION = """
-You are a clarity editor.
-Keep the paragraph’s imaginative content intact.
-Fix grammar, merge duplicate phrases, but DO NOT delete technical or creative wording.
-Target 11th-grade reading level, Flesch 50–60.
+You are the Final Polish stage of a "Never-Before-Thought" generator.
+
+Your job is to lightly edit the paragraph for clarity and readability while
+*preserving its creative soul*. The speculative content is the product — do NOT
+water it down, genericize it, or remove anything that makes it surprising.
+
+Rules:
+- Fix grammar, punctuation, and awkward phrasing.
+- Merge duplicate or redundant clauses.
+- Preserve all technical terms, vivid imagery, and creative language.
+- Do NOT add disclaimers, hedging ("it's worth noting…"), or AI-sounding phrases.
+- Do NOT change the meaning or soften the speculation.
+- Target 11th-grade reading level, Flesch 50–60.
+- Output ONLY the polished paragraph — no labels, no meta-commentary.
 """
 
 def safe_rewrite(p: str):
     prompt = SAFE_PROMPT_TEMPLATE.format(p=p)
     response = client.models.generate_content(
-        model="models/gemini-2.0-flash-lite",
+        model=os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash"),
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
@@ -27,6 +37,4 @@ def safe_rewrite(p: str):
         ),
     )
 
-    # print("Prompt in safety.py: ", prompt)
-    # print("Response in safety.py: ", response.text.strip())
     return response.text.strip()

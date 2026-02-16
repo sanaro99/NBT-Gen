@@ -38,11 +38,11 @@ def _call_mistral_chat(system_prompt: str, user_prompt: str, temperature: float 
     except (KeyError, IndexError):
         raise RuntimeError(f"Unexpected Mistral chat response: {data}")
 
-# ─── PSEUDO‐PERPLEXITY → COHERENCE via CHAT ────────────────────────────────────
+# ─── COHERENCE SCORING via CHAT ────────────────────────────────────────────────
 
 def is_coherent(text: str) -> float:
     """
-    Ask Mistral Chat to rate how coherent this paragraph is on a 0–1 scale.
+    Ask Mistral Chat to rate how coherent this paragraph is on a 0-1 scale.
     Returns the coherence score in [0,1]; higher is more plausible.
     Quick regex filter first to avoid API calls on obviously invalid text.
     """
@@ -53,11 +53,16 @@ def is_coherent(text: str) -> float:
     if not text.strip().endswith((".", "?", "!")):
         return 0.1
 
-    # 2) Chat‐based coherence rating
+    # 2) Chat-based coherence rating
     system_prompt = (
-        "You are a text‐quality evaluator. "
-        "Rate the following paragraph’s coherence and grammar on a scale from 0 to 1: "
-        "0 means completely incoherent or gibberish; 1 means perfectly coherent English with no errors. "
+        "You are a coherence evaluator for a 'Never-Before-Thought' creativity engine. "
+        "The paragraph you receive is intentionally speculative - it imagines reality "
+        "working differently than it does. Your job is NOT to judge whether the idea is "
+        "true, but whether it is INTERNALLY CONSISTENT and well-constructed. "
+        "Rate on a scale from 0 to 1: "
+        "0 = gibberish, broken grammar, contradicts itself within the paragraph; "
+        "0.5 = readable but has logical gaps or redundant clauses; "
+        "1 = grammatically sound, internally consistent, and reads as a coherent thought. "
         "Reply with exactly one decimal number (e.g., 0.75) and nothing else."
     )
     user_prompt = f"\"\"\"\n{text}\n\"\"\""
@@ -70,13 +75,13 @@ def is_coherent(text: str) -> float:
             score = float(match.group())
         else:
             raise ValueError(f"Could not parse coherence score from '{rating_str}'")
-        print("Coherence score (0–1): ", score)
+        print("Coherence score (0-1): ", score)
         return score
     except Exception as e:
         print(f"[filter.py] Error calling Mistral API: {e}", file=sys.stderr)
         return 0.0
 
-# ─── COMMAND‐LINE INTERFACE ──────────────────────────────────────────────────────
+# ─── COMMAND-LINE INTERFACE ──────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="Test is_coherent(text) via Mistral API.")

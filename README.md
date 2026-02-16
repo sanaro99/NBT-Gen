@@ -1,7 +1,7 @@
 # Never-Before-Thought Generator (NBT-Gen)
 
 _A web application that outputs weird-yet-meaningful "never-before-thought" ideas._  
-Built with **FastAPI** backend, **Jinja2 Templates** (Bootstrap 5 & [NES.css](https://github.com/nostalgic-css/NES.css)) for UI, **Gemini** (2.0 and 2.5 Flash) for assumption mining, idea composition, and final polish, and **Mistral-small** for coherence & novelty scoring.
+Built with **FastAPI** backend, **Jinja2 Templates** (Bootstrap 5 & [NES.css](https://github.com/nostalgic-css/NES.css)) for UI, **Gemini 2.5 Flash** for assumption mining, idea composition, and final polish, and **Mistral-small** for coherence & novelty scoring.
 
 ---
 
@@ -18,7 +18,7 @@ To build an autonomous creativity pipeline that takes any **topic** (e.g. *"plat
 ┌────────────┐    ┌──────────────┐    ┌────────────────────┐    ┌───────────────┐
 │  FastAPI   │─>──│ Assumption   │─>──│   Divergent Idea   │─>──│   Coherence   │
 │  endpoint  │    │  Miner       │    │     Composer       │    │     Filter    │
-│  /generate │    │ (Gemini 2.0) │    │(Gemini 2.5, T(0-2))│    │(Mistral-small)│
+│  /generate │    │(Gemini Flash)│    │(Gemini Flash, T≈1) │    │(Mistral-small)│
 └────────────┘    └──────────────┘    └────────────────────┘    └───────────────┘
                                                                        │
                                                           ┌────────────┴──────────┐
@@ -28,16 +28,16 @@ To build an autonomous creativity pipeline that takes any **topic** (e.g. *"plat
                                                                        │
                                                           ┌────────────┴──────────┐
                                                           │ Safety & Final Polish │
-                                                          │  (Gemini 2.0 Flash)   │
+                                                          │   (Gemini Flash)      │
                                                           └────────────┬──────────┘
                                                                        │
                                           Server-rendered Web UI via Jinja2 Templates
 ```
-1. **Assumption Miner** – Gemini 2.0 Flash at `temperature≈0` generates canonical premises of the topic.  
-2. **Assumption Tweaker & Composer** – Gemini 2.5 Flash at `temperature` set by the wildness slider flips one premise into a bold, coherent paragraph.  
-3. **Coherence Filter** – Mistral-small rates coherence [0–1]; scores ≥0.3 pass.  
-4. **Novelty Scorer** – Mistral-small rates novelty [0–1], indicating unexpectedness.  
-5. **Safety & Final Polish** – Gemini 2.0 Flash Lite rewrites for clarity & compliance.  
+1. **Assumption Miner** – Gemini 2.5 Flash at `temperature≈0` extracts invertible premises — both obvious facts and subtle implicit axioms.  
+2. **Divergent Idea Composer** – Gemini 2.5 Flash at `temperature` set by the wildness slider inverts one premise into a vivid, never-before-thought paragraph.  
+3. **Coherence Filter** – Mistral-small rates internal logical consistency [0–1]; scores ≥0.3 pass.  
+4. **Novelty Scorer** – Mistral-small rates genuine novelty [0–1] — not just unusualness, but "has this been thought before?"  
+5. **Safety & Final Polish** – Gemini 2.5 Flash polishes for clarity while preserving the creative soul.  
 6. **Frontend** – Server-rendered Jinja2 templates with Bootstrap 5, NES.css, dark/light toggle, and wildness slider.
 
 ---
@@ -75,11 +75,13 @@ $ uvicorn app.main:app --reload
 ```
 
 ### Required Environment Variables
-| name            | purpose                                          |
-|-----------------|--------------------------------------------------|
-| `GEMINI_API_KEY`| Google AI Studio key for Gemini calls            |
-| `MISTRAL_API_KEY`| API key for Mistral Chat coherence & novelty |
-| `VERCEL_TOKEN`   | (optional) Vercel deploy token for CI/CD        |
+| name                  | purpose                                          |
+|-----------------------|--------------------------------------------------|
+| `GEMINI_API_KEY`      | Google AI Studio key for Gemini calls            |
+| `MISTRAL_API_KEY`     | API key for Mistral Chat coherence & novelty     |
+| `GEMINI_MODEL`        | Model for miner & polish (default: `models/gemini-2.5-flash`) |
+| `GEMINI_COMPOSER_MODEL` | Model for idea composition (default: `models/gemini-2.5-flash`) |
+| `VERCEL_TOKEN`        | (optional) Vercel deploy token for CI/CD         |
 
 ---
 

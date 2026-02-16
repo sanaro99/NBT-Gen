@@ -49,10 +49,15 @@ def score_novelty(text: str) -> float:
     Returns a float in [0,1]. On failure, returns FALLBACK_NOVELTY.
     """
     system_prompt = (
-        "You are a novelty assessor. "
-        "On a scale from 0 to 1, rate how unusual or groundbreaking this paragraph is "
-        "relative to standard encyclopedic/Wikipedia style. "
-        "0 means very common/predictable; 1 means extremely unexpected. "
+        "You are the Novelty Scorer for a 'Never-Before-Thought' generator. "
+        "Rate how genuinely NOVEL this speculative paragraph is on a 0 to 1 scale. "
+        "You are measuring whether this idea has likely been thought or written before — "
+        "not whether it is strange. A reshuffled cliché is NOT novel even if it sounds weird. "
+        "Scoring guide: "
+        "0.0–0.3 = common knowledge, popular science fiction trope, or familiar thought experiment; "
+        "0.4–0.6 = interesting twist but builds on a well-known 'what if'; "
+        "0.7–0.8 = a genuinely surprising inversion that connects ideas in an unexpected way; "
+        "0.9–1.0 = feels like an entirely new thought — the reader's first reaction is 'I have never considered this.' "
         "Reply with exactly one decimal number (e.g., 0.82) and nothing else."
     )
     user_prompt = f"\"\"\"\n{text}\n\"\"\""
