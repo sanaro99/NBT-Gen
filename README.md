@@ -1,9 +1,9 @@
 # Never-Before-Thought Generator (NBT-Gen)
 
 _A web application that outputs weird-yet-meaningful "never-before-thought" ideas._  
-Built with a **FastAPI** backend, **Jinja2 Templates** (Bootstrap 5 & [NES.css](https://github.com/nostalgic-css/NES.css)) for UI, **Gemini 2.5 Flash** for assumption mining, idea composition, and final polish, and **Mistral-small** as an independent **comparative judge** for coherence, novelty & surprise.
+Built with a **FastAPI** backend, **Jinja2 Templates** (Bootstrap 5 & [NES.css](https://github.com/nostalgic-css/NES.css)) for UI, **Gemini 2.5 Flash** to generate candidate ideas (mining + composition in one structured call), and **Mistral-small** as an independent **comparative judge** for coherence, novelty & surprise.
 
-It uses a **best-of-N** strategy: for each topic it composes several divergent ideas in parallel and a single judge call ranks them, so the idea you get is the strongest of the batch — not one lucky random draw.
+It uses a **best-of-N** strategy: for each topic one Gemini call composes several divergent ideas and a single Mistral call ranks them, so the idea you get is the strongest of the batch — not one lucky random draw.
 
 ---
 
@@ -19,25 +19,17 @@ To build an autonomous creativity pipeline that takes any **topic** (e.g. *"plat
 ```
 topic + wildness
       │
-      ▼  Gemini  (mine ONCE, structured JSON)
-[1] Assumption Miner ──► ~12 assumptions (textbook facts + hidden axioms)
-      │
-      ▼  Gemini ×N in parallel (capped temp, varied divergence operators)
-[2] Divergent Composer ──► N candidate paragraphs {assumption, operator}
+      ▼  Gemini  (ONE structured-JSON call: mine + compose)
+[1] Generator ──► N finished candidate ideas, each {assumption, operator, idea}
       │
       ▼  Mistral-small  (ONE comparative call, structured JSON)
-[3] Comparative Judge ──► per-candidate coherence / novelty / surprise + ranking
+[2] Comparative Judge ──► per-candidate coherence / novelty / surprise + ranking
       │                     keep the best; if below the bar → one more round
-      ▼  Gemini  (light edit, preserve the creative soul)
-[4] Safety & Final Polish ──► final idea
-      │
       ▼  SSE → server-rendered Jinja2 UI
 ```
-1. **Assumption Miner** – Gemini at `temperature≈0.3` extracts ~12 premises (textbook facts + subtle hidden axioms) via structured JSON, **once** per request.
-2. **Divergent Composer** – Gemini composes `N_CANDIDATES` (default 3) paragraphs **concurrently**, each applying a different **divergence operator** (`invert`, `merge`, `rescale`, `reverse_causality`, `substrate_swap`) to a different assumption. The wildness slider sets a capped sampling temperature (0.6–1.3) and the conceptual reach of the twist.
-3. **Comparative Judge** – Mistral-small scores **all** candidates in one call on coherence, novelty and surprise [0–1] and ranks them. If the judge API is unavailable it degrades to a transparent local heuristic (surfaced as `scoring_degraded`, never a silent pass).
-4. **Safety & Final Polish** – Gemini polishes the single winning candidate for clarity while preserving the creative soul.
-5. **Frontend** – Server-rendered Jinja2 templates (Bootstrap 5, NES.css, dark/light toggle, wildness slider). Status streams over SSE and the final result renders **in place** — the pipeline runs exactly once.
+1. **Generator** – In a single Gemini call, the model surfaces the topic's assumptions *internally* and returns `N_CANDIDATES` (default 5) finished, already-clean ideas. Across the set it uses a different **divergence operator** (`invert`, `merge`, `rescale`, `reverse_causality`, `substrate_swap`) per candidate and twists different assumptions (including non-obvious ones). The wildness slider sets a capped sampling temperature (0.6–1.3) and the conceptual reach of the twist. One call (not `1 + N + 1`) keeps latency and API usage low.
+2. **Comparative Judge** – Mistral-small scores **all** candidates in one call on coherence, novelty and surprise [0–1] and ranks them, using the full range and penalizing formulaic openings. If the judge API is unavailable it degrades to a transparent local heuristic (surfaced as `scoring_degraded`, never a silent pass). If the best candidate is below the quality bar and scoring is reliable, the pipeline runs one more round.
+3. **Frontend** – Server-rendered Jinja2 templates (Bootstrap 5, NES.css, dark/light toggle, wildness slider). Status streams over SSE and the final result renders **in place** — the pipeline runs exactly once.
 
 ---
 
@@ -89,7 +81,7 @@ $ uvicorn app.main:app --reload
 | `GEMINI_MODEL`          | Miner & polish model (default `models/gemini-2.5-flash`)       |
 | `GEMINI_COMPOSER_MODEL` | Composer model (default = `GEMINI_MODEL`)                      |
 | `MISTRAL_MODEL`         | Judge model (default `mistral-small-latest`)                   |
-| `NBT_N_CANDIDATES`      | Best-of-N candidates per round (default `3`; higher = better & costlier) |
+| `NBT_N_CANDIDATES`      | Best-of-N candidates per round (default `5`; one call regardless of N) |
 | `NBT_MAX_ROUNDS`        | Compose+judge rounds before returning best (default `2`)       |
 | `NBT_MIN_COHERENCE` / `NBT_MIN_NOVELTY` | Quality bar (defaults `0.5` / `0.55`)          |
 
@@ -102,13 +94,11 @@ See `.env.example` for the full list of tunables.
 NBT-Gen/
 ├─ app/
 │  ├─ main.py            # FastAPI routes (/, /generate, /generate-stream)
-│  ├─ config.py          # env reads, tunables, shared Gemini client
-│  ├─ pipeline.py        # best-of-N orchestration
+│  ├─ config.py          # env reads, tunables, shared Gemini client + retry
+│  ├─ pipeline.py        # lean best-of-N orchestration
 │  └─ modules/
-│     ├─ miner.py        # [1] assumptions  (Gemini, structured JSON)
-│     ├─ composer.py     # [2] best-of-N candidates (Gemini, parallel)
-│     ├─ judge.py        # [3] comparative scoring (Mistral)
-│     └─ safety.py       # [4] final polish (Gemini)
+│     ├─ generator.py    # [1] mine + compose N candidates (one Gemini call)
+│     └─ judge.py        # [2] comparative scoring (Mistral)
 ├─ templates/index.html  # UI + SSE client
 ├─ static/               # screenshots & static assets
 ├─ tests/                # pytest suite (API calls mocked)

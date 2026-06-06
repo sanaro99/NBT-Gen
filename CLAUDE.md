@@ -21,26 +21,29 @@ pytest                        # all API calls are mocked — no keys/network nee
 Requires `GEMINI_API_KEY` (creative stages) and `MISTRAL_API_KEY` (judge). All
 tunables live in `app/config.py` and are overridable via env (see `.env.example`).
 
-## Pipeline (best-of-N) — `app/pipeline.py:generate_idea`
+## Pipeline (lean best-of-N) — `app/pipeline.py:generate_idea`
 
 ```
-mine ONCE → compose N candidates (parallel) → judge ALL in one call → polish winner
+generate N candidates (ONE structured Gemini call) → judge ALL (one Mistral call) → best
+        ↑ if best is below the bar and scoring is reliable, run one more round
 ```
 
-1. **`modules/miner.py`** (Gemini, structured JSON) — ~12 tagged assumptions, mined
-   once per request.
-2. **`modules/composer.py`** (Gemini, `N_CANDIDATES` in parallel) — each candidate
-   twists a *different* assumption with a *different* **divergence operator**
-   (`invert`/`merge`/`rescale`/`reverse_causality`/`substrate_swap`). Temperature is
-   `wildness_to_temperature()` (0.6–1.3, capped — never the 2.0 that makes Gemini
-   incoherent).
-3. **`modules/judge.py`** (Mistral, one comparative call) — scores every candidate on
+1. **`modules/generator.py`** (Gemini, one structured-JSON call) — mines the topic's
+   assumptions *internally* and emits `N_CANDIDATES` finished candidate ideas, each
+   tagged with the `assumption` it twists and the `operator` used
+   (`invert`/`merge`/`rescale`/`reverse_causality`/`substrate_swap`). Prose comes back
+   already clean (polish rules are folded into the prompt — there is no separate polish
+   stage). Temperature is `wildness_to_temperature()` (0.6–1.3, capped — never the 2.0
+   that makes Gemini incoherent).
+2. **`modules/judge.py`** (Mistral, one comparative call) — scores every candidate on
    coherence/novelty/surprise and ranks them. Returns
    `{"ranked": [...], "scoring_degraded": bool}`.
-4. **`modules/safety.py`** (Gemini) — polishes only the winner.
 
-Model split is intentional: **Gemini creates, Mistral judges** (an independent judge
-reduces self-grading bias).
+So a generation is **~1 Gemini call per round** (not ~5). Model split is intentional:
+**Gemini generates, Mistral judges** (an independent judge reduces self-grading bias).
+History: an earlier version had separate `miner.py` / `composer.py` (parallel
+per-candidate) / `safety.py` (polish) — collapsed into `generator.py` to cut API
+calls and latency.
 
 ## Routes — `app/main.py`
 
@@ -58,12 +61,14 @@ The browser uses the SSE endpoint and renders the `result` **in place**.
   discarded and the form re-POSTed, running the pipeline twice and showing a
   *different* idea than the one streamed. The frontend (`templates/index.html`,
   `renderResult`) now paints the streamed `result` directly. Keep it that way.
-- **Free-tier Gemini = 5 requests/minute.** One generation ≈ `1 + N_CANDIDATES + 1`
-  Gemini calls, so `N_CANDIDATES` defaults to **3** to fit. Raising it improves
-  quality but costs quota. The pipeline degrades gracefully: failed composer
-  candidates are skipped, and a failed polish call falls back to the unpolished
-  winner (`pipeline.py`). Transient 5xx are retried in `config.gemini_generate`;
-  429 is not (the wait is too long to be useful live).
+- **Free-tier Gemini quota is brutal and PER-MODEL PER-DAY.** Measured on this
+  project: `gemini-2.5-flash` = **20 requests/day**; `gemini-2.0-flash` = **0** (not
+  available). The lean pipeline uses ~1 Gemini call/generation (one structured call
+  produces all `N_CANDIDATES`), so the free tier allows ~20 generations/day instead
+  of ~4. `N_CANDIDATES` (default 5) no longer multiplies the call count — only output
+  tokens. Transient 5xx are retried in `config.gemini_generate`; 429 is not (the wait
+  is too long to be useful live). Daily quota resets ~midnight Pacific; a paid key
+  removes the limit.
 - **No silent scoring.** If the Mistral judge is unreachable, `judge.py` uses a
   local heuristic and sets `scoring_degraded=True` (surfaced in the UI) — it never
   quietly passes a fake 0.5 novelty.
@@ -80,5 +85,6 @@ The browser uses the SSE endpoint and renders the `result` **in place**.
 
 `tests/conftest.py` sets dummy keys so imports don't need a real `.env`. Tests stub
 the stage functions / API calls, so they're fast and offline. When you change the
-pipeline contract, update `test_pipeline.py` (it asserts mine-once + one judge call +
-graceful fallbacks).
+pipeline contract, update `test_pipeline.py` (it asserts one generate call + one
+judge call per round, second round only when the best is below the bar, and
+short-circuit when scoring is degraded).

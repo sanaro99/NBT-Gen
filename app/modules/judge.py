@@ -23,14 +23,18 @@ log = config.log.getChild("judge")
 W_NOVELTY, W_SURPRISE, W_COHERENCE = 0.45, 0.30, 0.25
 
 SYSTEM_PROMPT = (
-    "You are the Judge for a 'Never-Before-Thought' creativity engine. You receive "
-    "several speculative paragraphs that intentionally imagine reality working "
+    "You are a demanding Judge for a 'Never-Before-Thought' creativity engine. You "
+    "receive several speculative paragraphs that intentionally imagine reality working "
     "differently than it does. Do NOT judge whether an idea is true. For EACH "
     "paragraph rate three axes from 0 to 1: "
     "coherence (internally consistent, grammatical, well-formed); "
-    "novelty (genuinely un-thought-before — a reshuffled cliché or known thought "
-    "experiment scores low even if it sounds weird); "
+    "novelty (genuinely un-thought-before — a reshuffled cliché, a known thought "
+    "experiment, or a familiar sci-fi trope scores LOW even if it sounds weird); "
     "surprise (does it make a reader pause and reconsider). "
+    "Be discriminating and use the FULL 0–1 range: spread the scores so the best and "
+    "worst are clearly separated; do not bunch everything near the top. "
+    "Penalize formulaic, templated openings (e.g. starting with 'Traditionally', "
+    "'Conventionally', 'Everyone knows', 'Imagine') and generic phrasing. "
     "Reply with JSON only, shaped exactly as: "
     '{"scores": [{"index": 0, "coherence": 0.0, "novelty": 0.0, "surprise": 0.0, '
     '"rationale": "short reason"}]}. Include one object per paragraph, by index.'

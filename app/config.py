@@ -3,8 +3,8 @@
 Every environment read and knob lives here so the pipeline modules stay focused on
 logic. Import from this module instead of calling ``os.getenv`` in each file.
 
-Model split (kept intentionally): Gemini handles the *creative* stages
-(mine / compose / polish); Mistral is the independent *judge*.
+Model split (kept intentionally): Gemini *generates* candidate ideas (mine +
+compose in one structured call); Mistral is the independent *judge*.
 """
 import logging
 import os
@@ -34,9 +34,8 @@ MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
 MISTRAL_CHAT_URL = "https://api.mistral.ai/v1/chat/completions"
 
 # ─── Pipeline tunables ───────────────────────────────────────────────────────────
-VERSION = "0.3.0"
-N_ASSUMPTIONS = int(os.getenv("NBT_N_ASSUMPTIONS", "12"))   # mined once per topic
-N_CANDIDATES = int(os.getenv("NBT_N_CANDIDATES", "3"))      # best-of-N composed
+VERSION = "0.4.0"
+N_CANDIDATES = int(os.getenv("NBT_N_CANDIDATES", "5"))      # best-of-N in one call
 MAX_ROUNDS = int(os.getenv("NBT_MAX_ROUNDS", "2"))          # compose+judge rounds
 MIN_COHERENCE = float(os.getenv("NBT_MIN_COHERENCE", "0.5"))
 MIN_NOVELTY = float(os.getenv("NBT_MIN_NOVELTY", "0.55"))
