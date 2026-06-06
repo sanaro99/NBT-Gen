@@ -1,13 +1,13 @@
-from google import genai
-from google.genai import types
-import os
+"""Stage 4 — Safety & Final Polish (Gemini).
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-SAFE_PROMPT_TEMPLATE = """
-Paragraph:
-{p}
+Lightly edits the single winning candidate for clarity while preserving its
+creative soul. Runs once, on the winner only.
 """
+from google.genai import types
+
+from .. import config
+
+log = config.log.getChild("safety")
 
 SYSTEM_INSTRUCTION = """
 You are the Final Polish stage of a "Never-Before-Thought" generator.
@@ -26,15 +26,14 @@ Rules:
 - Output ONLY the polished paragraph — no labels, no meta-commentary.
 """
 
-def safe_rewrite(p: str):
-    prompt = SAFE_PROMPT_TEMPLATE.format(p=p)
-    response = client.models.generate_content(
-        model=os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash"),
-        contents=prompt,
-        config=types.GenerateContentConfig(
+
+def safe_rewrite(p: str) -> str:
+    response = config.gemini_generate(
+        model=config.GEMINI_MODEL,
+        contents=f"Paragraph:\n{p}",
+        gen_config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
             temperature=0.0,
         ),
     )
-
-    return response.text.strip()
+    return (response.text or "").strip()

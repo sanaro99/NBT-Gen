@@ -1,6 +1,4 @@
 from dotenv import load_dotenv
-import os
 
+# Load .env as early as possible (config.py also calls this defensively).
 load_dotenv()
-
-# print("Gemini key in init.py: ", os.getenv("GEMINI_API_KEY"))

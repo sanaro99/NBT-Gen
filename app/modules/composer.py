@@ -1,60 +1,130 @@
-from google import genai
-from google.genai import types
-import os
+"""Stage 2 — Divergent Idea Composer (Gemini).
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-PROMPT_TEMPLATE = """
-Topic: {topic}
-Core assumption to invert: "{assumption}"
+The creative heart. Instead of inverting one random assumption, it composes
+``N_CANDIDATES`` paragraphs in parallel, each twisting a *different* assumption with
+a *different* divergence operator, so the Judge has a real spread to choose from.
 """
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from google.genai import types
+
+from .. import config
+
+log = config.log.getChild("composer")
+
+# Divergence operators break the formulaic "everyone knows X, but what if not-X"
+# structure by offering several distinct creative moves.
+OPERATORS: dict[str, str] = {
+    "invert": "Assume the exact OPPOSITE of the assumption is true, and follow it through.",
+    "merge": "Collide this assumption with a distant, unrelated one about the topic so they share a single mechanism.",
+    "rescale": "Keep the assumption but move it to a wildly different scale of time, size, or number.",
+    "reverse_causality": "Swap cause and effect: treat the assumption's consequence as its hidden cause.",
+    "substrate_swap": "Keep the assumption's function but change what physically implements it.",
+}
+_OP_NAMES = list(OPERATORS)
 
 SYSTEM_INSTRUCTION = """
 You are the Divergent Idea Composer — the creative heart of a "Never-Before-Thought"
-generator. Your purpose is to produce a single, breathtaking speculative idea that
-no human has likely conceived before.
+generator. You produce a single, breathtaking speculative idea that no human has
+likely conceived before.
 
-You receive a topic and one of its core assumptions. Your task is to *invert* that
-assumption and compose a vivid, intellectually surprising paragraph that feels like
-it could rewrite a chapter of science, philosophy, or culture.
+You receive a topic, one of its core assumptions, a divergence move to apply, and a
+wildness level (0–100). Apply the move to the assumption and compose a vivid,
+intellectually surprising paragraph that feels like it could rewrite a chapter of
+science, philosophy, or culture.
 
 Composition rules:
-1. Open with a single-sentence setup: state the conventional wisdom in a crisp,
-   "everyone knows" framing (do NOT use the literal phrase "Current view:").
-2. Pivot with a bold inversion — reimagine reality as if the opposite of the
-   assumption were true. Be specific: name mechanisms, scales, or entities.
-3. Develop the speculation for 2–3 sentences using precise, vivid language.
-   Prefer concrete imagery and unexpected analogies over abstract hand-waving.
-   No mystical jargon; no clichés like "paradigm shift" or "dance of forces."
-4. Close with one punchy consequence sentence that makes the reader pause —
-   the kind of implication that lingers after the paragraph ends.
+1. Open with one crisp sentence stating the conventional wisdom (do NOT use the
+   literal phrase "Current view:").
+2. Pivot with a bold twist driven by the divergence move. Be specific: name
+   mechanisms, scales, or entities.
+3. Develop the speculation for 2–3 sentences with concrete imagery and unexpected
+   analogies. No mystical jargon; no clichés like "paradigm shift" or "dance of
+   forces."
+4. Close with one punchy consequence sentence that lingers.
+
+Wildness guidance: low wildness stays close to plausible science; high wildness
+reaches for a stranger, more distant leap — but it must always stay internally
+consistent.
 
 Quality bar:
-- Target 80–120 words. Never exceed 130.
-- 11th-grade reading level (Flesch ≈ 50–60).
-- The idea must be *internally consistent* — wild but logically coherent within
-  its own speculative frame.
-- Novelty is paramount. Avoid ideas that resemble existing science fiction tropes,
-  popular thought experiments, or anything that feels "already said."
-- Do NOT repeat any clause or phrase.
+- 80–120 words, never over 130. 11th-grade reading level (Flesch ≈ 50–60).
+- Wild but logically coherent within its own speculative frame.
+- Avoid sci-fi tropes and familiar thought experiments. Do not repeat any clause.
 - Output ONLY the paragraph — no titles, labels, or meta-commentary.
 """
 
-def compose_idea(topic: str, assumption: str, wildness: int = 50):
-    clamped_wildness = max(0, min(wildness, 100))  # Ensure 0 ≤ wildness ≤ 100
-    temp = (clamped_wildness / 100) * 2.0
-    prompt = PROMPT_TEMPLATE.format(topic=topic, assumption=assumption)
-    response = client.models.generate_content(
-        model=os.getenv("GEMINI_COMPOSER_MODEL", "models/gemini-2.5-flash"),
+
+def _compose_one(topic: str, assumption: str, operator: str, temperature: float) -> dict:
+    move = OPERATORS[operator]
+    prompt = (
+        f"Topic: {topic}\n"
+        f'Core assumption: "{assumption}"\n'
+        f"Divergence move ({operator}): {move}"
+    )
+    response = config.gemini_generate(
+        model=config.GEMINI_COMPOSER_MODEL,
         contents=prompt,
-        config=types.GenerateContentConfig(
+        gen_config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
-            temperature=temp,
+            temperature=temperature,
             top_p=0.95,
         ),
     )
+    return {
+        "text": (response.text or "").strip(),
+        "assumption": assumption,
+        "operator": operator,
+    }
 
-    print("Prompt in composer.py: ", prompt)
-    print("Temperature in composer.py: ", temp)
-    print("Response in composer.py: ", response.text.strip())
-    return response.text.strip()
+
+def _build_pairs(assumptions: list[str], n: int, offset: int) -> list[tuple[str, str]]:
+    """Pick ``n`` distinct (assumption, operator) pairs, varied by ``offset`` so
+    successive rounds explore different combinations."""
+    if not assumptions:
+        return []
+    pairs = []
+    for i in range(n):
+        idx = (offset + i) % len(assumptions)
+        operator = _OP_NAMES[(offset + i) % len(_OP_NAMES)]
+        pairs.append((assumptions[idx], operator))
+    return pairs
+
+
+def compose_candidates(
+    topic: str,
+    assumptions: list[str],
+    wildness: int = 50,
+    n: int | None = None,
+    round_idx: int = 0,
+) -> list[dict]:
+    """Compose ``n`` candidate paragraphs concurrently. Skips individual failures;
+    raises only if every candidate fails."""
+    n = n or config.N_CANDIDATES
+    base_temp = config.wildness_to_temperature(wildness)
+    pairs = _build_pairs(assumptions, n, offset=round_idx * n)
+
+    candidates: list[dict] = []
+    with ThreadPoolExecutor(max_workers=max(1, len(pairs))) as pool:
+        futures = {
+            # small per-candidate jitter widens the search a little
+            pool.submit(
+                _compose_one, topic, assumption, operator,
+                min(base_temp + 0.04 * i, config.TEMP_MAX + 0.1),
+            ): (assumption, operator)
+            for i, (assumption, operator) in enumerate(pairs)
+        }
+        for future in as_completed(futures):
+            assumption, operator = futures[future]
+            try:
+                cand = future.result()
+                if cand["text"]:
+                    candidates.append(cand)
+            except Exception as exc:  # one bad call shouldn't sink the batch
+                log.warning("Candidate failed (%s / %r): %s", operator, assumption, exc)
+
+    if not candidates:
+        raise RuntimeError("Composer produced no candidates")
+    log.info("Composed %d/%d candidates (round %d, temp≈%.2f)",
+             len(candidates), n, round_idx, base_temp)
+    return candidates
