@@ -65,7 +65,7 @@ def _call_mistral(candidates: list[dict]) -> list[dict]:
         f"[{i}]\n\"\"\"\n{c['text']}\n\"\"\"" for i, c in enumerate(candidates)
     )
     payload = {
-        "model": config.MISTRAL_MODEL,
+        "model": config.resolve_mistral_model(config.MISTRAL_MODEL),
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"Score these {len(candidates)} paragraphs as JSON:\n\n{body}"},
