@@ -80,7 +80,7 @@ $ uvicorn app.main:app --reload
 | `MISTRAL_API_KEY`       | **Required.** Mistral key for the comparative judge            |
 | `GEMINI_MODEL`          | Generator model — default `gemini-flash-latest` (auto-tracks newest flash); use `auto` to discover the newest at runtime |
 | `GEMINI_COMPOSER_MODEL` | Override generator model (default = `GEMINI_MODEL`)            |
-| `MISTRAL_MODEL`         | Judge model — default `mistral-large-latest`; use `auto` to discover the best chat model |
+| `MISTRAL_MODEL`         | Judge model — default `mistral-small-latest` (free-tier-friendly); use `mistral-large-latest` or `auto` for max quality |
 | `NBT_N_CANDIDATES`      | Best-of-N candidates per round (default `5`; one call regardless of N) |
 | `NBT_MAX_ROUNDS`        | Compose+judge rounds before returning best (default `2`)       |
 | `NBT_MIN_COHERENCE` / `NBT_MIN_NOVELTY` | Quality bar (defaults `0.5` / `0.55`)          |

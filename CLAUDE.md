@@ -72,13 +72,14 @@ The browser uses the SSE endpoint and renders the `result` **in place**.
 - **No silent scoring.** If the Mistral judge is unreachable, `judge.py` uses a
   local heuristic and sets `scoring_degraded=True` (surfaced in the UI) — it never
   quietly passes a fake 0.5 novelty.
-- **Model names are never version-pinned.** Defaults are provider "latest" aliases
-  (`gemini-flash-latest`, `mistral-large-latest`) so new versions are picked up and
-  deprecated ones never need a code change. Setting `GEMINI_MODEL=auto` /
-  `MISTRAL_MODEL=auto` switches to runtime discovery: `config.resolve_gemini_model` /
-  `resolve_mistral_model` query the provider's models-list endpoint and pick the
-  newest stable flash / best general chat (cached per process). Don't hardcode
-  `gemini-2.5-flash`-style names.
+- **Model names are never version-pinned.** Defaults are provider "latest" aliases —
+  `gemini-flash-latest` and `mistral-small-latest` (the judge default is small to stay
+  free-tier-friendly; `mistral-large-latest`/`auto` is the max-quality opt-in). New
+  versions are picked up automatically and deprecated ones never need a code change.
+  Setting `GEMINI_MODEL=auto` / `MISTRAL_MODEL=auto` switches to runtime discovery:
+  `config.resolve_gemini_model` / `resolve_mistral_model` query the provider's
+  models-list endpoint and pick the newest stable flash / best general chat (cached
+  per process). Don't hardcode `gemini-2.5-flash`-style names.
 - **All Gemini calls go through `config.gemini_generate(...)`**, not the client
   directly — that's where model resolution + retry/backoff live.
 - **Mistral is called via `requests`** against the REST API (structured

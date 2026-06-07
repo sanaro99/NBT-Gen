@@ -36,7 +36,9 @@ MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 # runtime (see resolve_*_model below) — zero reliance on alias names.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 GEMINI_COMPOSER_MODEL = os.getenv("GEMINI_COMPOSER_MODEL", GEMINI_MODEL)
-MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
+# Free-tier-friendly judge by default (small is plenty for 0–1 scoring and light on
+# the free token budget). Set to "auto" or mistral-large-latest for max quality.
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
 MISTRAL_MODELS_URL = "https://api.mistral.ai/v1/models"
 MISTRAL_CHAT_URL = "https://api.mistral.ai/v1/chat/completions"
 
