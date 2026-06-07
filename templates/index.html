@@ -133,15 +133,23 @@
           </div>
           <div class="status-message" id="status-message"></div>
         </form>
-        {% if idea %}
-        <hr>
-        <div class="mt-4">
+        <div id="results" class="mt-4" {% if not idea %}style="display: none;"{% endif %}>
+          <hr>
           <h5 class="card-title">💡 New thought</h5>
-          <p class="card-text" style="white-space: pre-line;">{{ idea }}</p>
-          <p class="text-muted">Novelty score: {{ '%.2f' | format(novelty) }}</p>
-          <p class="text-muted">Coherence score: {{ '%.2f' | format(coherence) }}</p>
+          <p id="result-idea" class="card-text" style="white-space: pre-line;">{{ idea or '' }}</p>
+          <p class="text-muted" style="font-size: 0.8rem;">
+            Twisted assumption: “<span id="result-assumption">{{ assumption or '' }}</span>”
+            · move: <span id="result-operator">{{ operator or '' }}</span>
+          </p>
+          <p class="text-muted" style="font-size: 0.8rem;">
+            Novelty <span id="result-novelty">{{ '%.2f' | format(novelty) if novelty is defined and novelty is not none else '' }}</span>
+            · Coherence <span id="result-coherence">{{ '%.2f' | format(coherence) if coherence is defined and coherence is not none else '' }}</span>
+            · Surprise <span id="result-surprise">{{ '%.2f' | format(surprise) if surprise is defined and surprise is not none else '' }}</span>
+          </p>
+          <p id="result-degraded" class="text-muted" style="font-size: 0.75rem;{% if not scoring_degraded %} display: none;{% endif %}">
+            ⚠ Scores estimated locally (judge unavailable).
+          </p>
         </div>
-        {% endif %}
       </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
@@ -157,57 +165,69 @@
         const btnText = btn.querySelector('.btn-text');
         const loadingText = btn.querySelector('.loading-text');
         const statusMessage = document.getElementById('status-message');
-        
+
         let isStreaming = false;
-        
+
+        const setLoading = (loading) => {
+          btn.classList.toggle('is-disabled', loading);
+          btn.classList.toggle('btn-loading', loading);
+          if (loading) { btn.setAttribute('disabled', 'disabled'); }
+          else { btn.removeAttribute('disabled'); }
+          btnText.style.display = loading ? 'none' : 'inline';
+          loadingText.style.display = loading ? 'inline' : 'none';
+        };
+
+        const renderResult = (d) => {
+          document.getElementById('result-idea').textContent = d.idea;
+          document.getElementById('result-assumption').textContent = d.assumption || '';
+          document.getElementById('result-operator').textContent = (d.operator || '').replace(/_/g, ' ');
+          document.getElementById('result-novelty').textContent = (d.novelty ?? 0).toFixed(2);
+          document.getElementById('result-coherence').textContent = (d.coherence ?? 0).toFixed(2);
+          document.getElementById('result-surprise').textContent = (d.surprise ?? 0).toFixed(2);
+          document.getElementById('result-degraded').style.display = d.scoring_degraded ? 'block' : 'none';
+          document.getElementById('results').style.display = 'block';
+        };
+
         form.addEventListener('submit', (e) => {
           if (isStreaming) return;
-          
+
           e.preventDefault();
           isStreaming = true;
-          
+
           const topic = document.getElementById('topic').value;
           const wildness = document.getElementById('wildness').value;
-          
-          btn.classList.add('is-disabled', 'btn-loading');
-          btn.setAttribute('disabled', 'disabled');
-          btnText.style.display = 'none';
-          loadingText.style.display = 'inline';
+
+          setLoading(true);
           statusMessage.textContent = 'Starting...';
-          
+
           const eventSource = new EventSource(`/generate-stream?topic=${encodeURIComponent(topic)}&wildness=${wildness}`);
-          
+
           eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            
+
             if (data.type === 'status') {
               statusMessage.textContent = data.message;
             } else if (data.type === 'result') {
+              // Render the streamed result directly — no re-submit, so the
+              // pipeline runs exactly once and we show the idea we just watched.
               eventSource.close();
-              statusMessage.textContent = 'Complete! Refreshing...';
-              // Submit form to get rendered result
-              setTimeout(() => {
-                isStreaming = false;
-                form.submit();
-              }, 500);
+              renderResult(data.data);
+              statusMessage.textContent = '';
+              setLoading(false);
+              isStreaming = false;
             } else if (data.type === 'error') {
               eventSource.close();
               statusMessage.textContent = 'Error: ' + data.message;
-              btn.classList.remove('is-disabled', 'btn-loading');
-              btn.removeAttribute('disabled');
-              btnText.style.display = 'inline';
-              loadingText.style.display = 'none';
+              setLoading(false);
               isStreaming = false;
             }
           };
-          
+
           eventSource.onerror = () => {
+            // SSE failed — fall back to a plain POST (still a single generation).
             eventSource.close();
             statusMessage.textContent = 'Connection error. Submitting...';
-            setTimeout(() => {
-              isStreaming = false;
-              form.submit();
-            }, 1000);
+            setTimeout(() => { isStreaming = false; form.submit(); }, 1000);
           };
         });
         

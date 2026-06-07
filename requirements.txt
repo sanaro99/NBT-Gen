@@ -3,6 +3,9 @@ uvicorn[standard]
 python-dotenv
 jinja2
 google-genai
-mistralai
+pydantic
 requests
 python-multipart
+# dev / test
+pytest
+httpx

@@ -1,7 +1,9 @@
 # Never-Before-Thought Generator (NBT-Gen)
 
 _A web application that outputs weird-yet-meaningful "never-before-thought" ideas._  
-Built with **FastAPI** backend, **Jinja2 Templates** (Bootstrap 5 & [NES.css](https://github.com/nostalgic-css/NES.css)) for UI, **Gemini 2.5 Flash** for assumption mining, idea composition, and final polish, and **Mistral-small** for coherence & novelty scoring.
+Built with a **FastAPI** backend, **Jinja2 Templates** (Bootstrap 5 & [NES.css](https://github.com/nostalgic-css/NES.css)) for UI, **Gemini 2.5 Flash** to generate candidate ideas (mining + composition in one structured call), and **Mistral-small** as an independent **comparative judge** for coherence, novelty & surprise.
+
+It uses a **best-of-N** strategy: for each topic one Gemini call composes several divergent ideas and a single Mistral call ranks them, so the idea you get is the strongest of the batch — not one lucky random draw.
 
 ---
 
@@ -15,47 +17,44 @@ To build an autonomous creativity pipeline that takes any **topic** (e.g. *"plat
 
 ## 2  System Architecture (high-level)
 ```
-┌────────────┐    ┌──────────────┐    ┌────────────────────┐    ┌───────────────┐
-│  FastAPI   │─>──│ Assumption   │─>──│   Divergent Idea   │─>──│   Coherence   │
-│  endpoint  │    │  Miner       │    │     Composer       │    │     Filter    │
-│  /generate │    │(Gemini Flash)│    │(Gemini Flash, T≈1) │    │(Mistral-small)│
-└────────────┘    └──────────────┘    └────────────────────┘    └───────────────┘
-                                                                       │
-                                                          ┌────────────┴──────────┐
-                                                          │     Novelty Scorer    │
-                                                          │     (Mistral-small)   │
-                                                          └────────────┬──────────┘
-                                                                       │
-                                                          ┌────────────┴──────────┐
-                                                          │ Safety & Final Polish │
-                                                          │   (Gemini Flash)      │
-                                                          └────────────┬──────────┘
-                                                                       │
-                                          Server-rendered Web UI via Jinja2 Templates
+topic + wildness
+      │
+      ▼  Gemini  (ONE structured-JSON call: mine + compose)
+[1] Generator ──► N finished candidate ideas, each {assumption, operator, idea}
+      │
+      ▼  Mistral-small  (ONE comparative call, structured JSON)
+[2] Comparative Judge ──► per-candidate coherence / novelty / surprise + ranking
+      │                     keep the best; if below the bar → one more round
+      ▼  SSE → server-rendered Jinja2 UI
 ```
-1. **Assumption Miner** – Gemini 2.5 Flash at `temperature≈0` extracts invertible premises — both obvious facts and subtle implicit axioms.  
-2. **Divergent Idea Composer** – Gemini 2.5 Flash at `temperature` set by the wildness slider inverts one premise into a vivid, never-before-thought paragraph.  
-3. **Coherence Filter** – Mistral-small rates internal logical consistency [0–1]; scores ≥0.3 pass.  
-4. **Novelty Scorer** – Mistral-small rates genuine novelty [0–1] — not just unusualness, but "has this been thought before?"  
-5. **Safety & Final Polish** – Gemini 2.5 Flash polishes for clarity while preserving the creative soul.  
-6. **Frontend** – Server-rendered Jinja2 templates with Bootstrap 5, NES.css, dark/light toggle, and wildness slider.
+1. **Generator** – In a single Gemini call, the model surfaces the topic's assumptions *internally* and returns `N_CANDIDATES` (default 5) finished, already-clean ideas. Across the set it uses a different **divergence operator** (`invert`, `merge`, `rescale`, `reverse_causality`, `substrate_swap`) per candidate and twists different assumptions (including non-obvious ones). The wildness slider sets a capped sampling temperature (0.6–1.3) and the conceptual reach of the twist. One call (not `1 + N + 1`) keeps latency and API usage low.
+2. **Comparative Judge** – Mistral-small scores **all** candidates in one call on coherence, novelty and surprise [0–1] and ranks them, using the full range and penalizing formulaic openings. If the judge API is unavailable it degrades to a transparent local heuristic (surfaced as `scoring_degraded`, never a silent pass). If the best candidate is below the quality bar and scoring is reliable, the pipeline runs one more round.
+3. **Frontend** – Server-rendered Jinja2 templates (Bootstrap 5, NES.css, dark/light toggle, wildness slider). Status streams over SSE and the final result renders **in place** — the pipeline runs exactly once.
 
 ---
 
 ## 3  API Design
-| verb | path        | data                         | description                              |
-|------|-------------|------------------------------|------------------------------------------|
-| POST | `/generate` | Form data: `topic` (string), `wildness` (0-100) | Renders page with generated idea and preserves input |
+| verb | path               | data                                            | description                                                        |
+|------|--------------------|-------------------------------------------------|--------------------------------------------------------------------|
+| GET  | `/`                | –                                               | Renders the form                                                   |
+| POST | `/generate`        | Form: `topic` (string), `wildness` (0-100)      | No-JS fallback: runs the pipeline once, server-renders the result  |
+| GET  | `/generate-stream` | Query: `topic`, `wildness`                      | SSE: streams `status` events then a final `result` event           |
 
-### Template Context
-| key           | type    | description                             |
-|---------------|---------|-----------------------------------------|
-| topic         | string  | The input topic                         |
-| wildness      | integer | Wildness slider value (0–100)           |
-| idea          | string  | Generated speculative idea              |
-| coherence     | float   | Coherence score [0–1] from Mistral-small|
-| novelty       | float   | Novelty score [0–1] from Mistral-small  |
-| version       | string  | Pipeline version identifier             |
+The browser uses `/generate-stream` and renders the `result` event **in place**; `POST /generate` is the progressive-enhancement fallback when JavaScript/SSE is unavailable.
+
+### Result / Template Context
+| key               | type    | description                                            |
+|-------------------|---------|--------------------------------------------------------|
+| topic             | string  | The input topic                                        |
+| wildness          | integer | Wildness slider value (0–100)                          |
+| idea              | string  | Final polished speculative idea                        |
+| coherence         | float   | Coherence score [0–1] (judge)                          |
+| novelty           | float   | Novelty score [0–1] (judge)                            |
+| surprise          | float   | Surprise score [0–1] (judge)                           |
+| assumption        | string  | The assumption that was twisted                        |
+| operator          | string  | Divergence move applied (e.g. `invert`, `rescale`)     |
+| scoring_degraded  | bool    | `true` if scores came from the local fallback heuristic|
+| version           | string  | Pipeline version identifier                            |
 
 ---
 
@@ -74,34 +73,47 @@ $ pip install -r requirements.txt
 $ uvicorn app.main:app --reload
 ```
 
-### Required Environment Variables
-| name                  | purpose                                          |
-|-----------------------|--------------------------------------------------|
-| `GEMINI_API_KEY`      | Google AI Studio key for Gemini calls            |
-| `MISTRAL_API_KEY`     | API key for Mistral Chat coherence & novelty     |
-| `GEMINI_MODEL`        | Model for miner & polish (default: `models/gemini-2.5-flash`) |
-| `GEMINI_COMPOSER_MODEL` | Model for idea composition (default: `models/gemini-2.5-flash`) |
-| `VERCEL_TOKEN`        | (optional) Vercel deploy token for CI/CD         |
+### Environment Variables
+| name                    | purpose                                                        |
+|-------------------------|----------------------------------------------------------------|
+| `GEMINI_API_KEY`        | **Required.** Google AI Studio key (miner, composer, polish)   |
+| `MISTRAL_API_KEY`       | **Required.** Mistral key for the comparative judge            |
+| `GEMINI_MODEL`          | Miner & polish model (default `models/gemini-2.5-flash`)       |
+| `GEMINI_COMPOSER_MODEL` | Composer model (default = `GEMINI_MODEL`)                      |
+| `MISTRAL_MODEL`         | Judge model (default `mistral-small-latest`)                   |
+| `NBT_N_CANDIDATES`      | Best-of-N candidates per round (default `5`; one call regardless of N) |
+| `NBT_MAX_ROUNDS`        | Compose+judge rounds before returning best (default `2`)       |
+| `NBT_MIN_COHERENCE` / `NBT_MIN_NOVELTY` | Quality bar (defaults `0.5` / `0.55`)          |
+
+See `.env.example` for the full list of tunables.
 
 ---
 
 ## 5  Project Layout
 ```
 NBT-Gen/
-├─ app/                  # FastAPI modules
-├─ templates/            # Jinja2 HTML templates
-├─ static/               # CSS & static assets
+├─ app/
+│  ├─ main.py            # FastAPI routes (/, /generate, /generate-stream)
+│  ├─ config.py          # env reads, tunables, shared Gemini client + retry
+│  ├─ pipeline.py        # lean best-of-N orchestration
+│  └─ modules/
+│     ├─ generator.py    # [1] mine + compose N candidates (one Gemini call)
+│     └─ judge.py        # [2] comparative scoring (Mistral)
+├─ templates/index.html  # UI + SSE client
+├─ static/               # screenshots & static assets
+├─ tests/                # pytest suite (API calls mocked)
 ├─ requirements.txt
 ├─ .env.example
-├─ README.md
-└─ Dockerfile
+├─ Dockerfile
+└─ README.md
 ```
 
 ---
 
 ## 6  Extending
-* **Embed feedback loop** – thumbs-up/down to inform future fine-tuning.
-* **Add local fallback** – Mistral/phi-2 for offline or quota-safe operation.
+* **Web-grounded novelty** – ground the novelty score in a real prior-art/search signal instead of the model's judgment alone.
+* **Feedback loop** – thumbs-up/down to inform future tuning.
+* **Tune the search** – raise `NBT_N_CANDIDATES` / `NBT_MAX_ROUNDS` for higher quality at more cost.
 
 ---
 ## 7  Sample Outputs
